@@ -35,7 +35,7 @@ public class Solution2 {
                 setNeededText(temp.substring(1));
             }
         } catch (IOException e) {
-            System.out.println("Возникла ошибка: " + e);
+            System.out.println("Р’РѕР·РЅРёРєР»Р° РѕС€РёР±РєР°: " + e);
             e.printStackTrace();
         }
 
@@ -46,7 +46,7 @@ public class Solution2 {
             SimpleDateFormat formatter = new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss");
             String currentDateTime = formatter.format(calendar.getTime());
             String path = "C:\\Temp\\" + currentDateTime;
-            Files.createDirectory(Path.of(path));//создали папку текущего запроса
+            Files.createDirectory(Path.of(path));//СЃРѕР·РґР°Р»Рё РїР°РїРєСѓ С‚РµРєСѓС‰РµРіРѕ Р·Р°РїСЂРѕСЃР°
             String logPath = "";
 
             while (bufferedReader.ready()) {
@@ -58,13 +58,13 @@ public class Solution2 {
                 if (line.contains(neededText)) {
                     UID = UIDsearcher(line);
                     logPath = path + "\\UID" + UID + ".txt";
-                    UIDMap.put(UID, logPath);   //добавили UID в множество
+                    UIDMap.put(UID, logPath);   //РґРѕР±Р°РІРёР»Рё UID РІ РјРЅРѕР¶РµСЃС‚РІРѕ
                 }
 
             }
 
         } catch (Exception e) {
-            System.out.println("Возникла ошибка: " + e);
+            System.out.println("Р’РѕР·РЅРёРєР»Р° РѕС€РёР±РєР°: " + e);
             e.printStackTrace();
         }
         try (InputStream input = Files.newInputStream(Path.of(logPath));
@@ -79,20 +79,15 @@ public class Solution2 {
                 } else line = temp;
 
 
-                for (String UIDNumber : UIDMap.keySet()) {  //пробегаем по множеству UID
+                for (String UIDNumber : UIDMap.keySet()) {  //РїСЂРѕР±РµРіР°РµРј РїРѕ РјРЅРѕР¶РµСЃС‚РІСѓ UID
                     if (line.contains(UIDNumber)) {
-                       // if (line.contains(previousLine)) {
-
-                      //      test = line.substring(line.lastIndexOf(previousLine) + previousLine.length() ); //тут сомнения про индекс
-                     //       line = test;
-                     //   }
                         logPath = UIDMap.get(UIDNumber);
                         Path file = Path.of(logPath);
                         try (FileWriter writer = new FileWriter(logPath, true)) {
                             if (Files.notExists(file)) {
-                                Files.createFile(file); //создали файлик для данного UID
+                                Files.createFile(file); //СЃРѕР·РґР°Р»Рё С„Р°Р№Р»РёРє РґР»СЏ РґР°РЅРЅРѕРіРѕ UID
                             }
-                            writer.write(temp + "\n");//записываем строку в свой UID
+                            writer.write(temp + "\n");//Р·Р°РїРёСЃС‹РІР°РµРј СЃС‚СЂРѕРєСѓ РІ СЃРІРѕР№ UID
                         }
                     }
                 }
@@ -101,7 +96,7 @@ public class Solution2 {
 
         } catch (
                 Exception e) {
-            System.out.println("Возникла ошибка: " + e);
+            System.out.println("Р’РѕР·РЅРёРєР»Р° РѕС€РёР±РєР°: " + e);
             e.printStackTrace();
         }
 
@@ -110,7 +105,7 @@ public class Solution2 {
     public static String UIDsearcher(String line) {
         indexFrom = line.indexOf("UID=");
         indexTo = line.indexOf(" ", indexFrom);
-        UID = line.substring(indexFrom + 4, indexTo);   //нашли UID
+        UID = line.substring(indexFrom + 4, indexTo);   //РЅР°С€Р»Рё UID
         return UID;
     }
 
