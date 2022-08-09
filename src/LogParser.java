@@ -1,15 +1,19 @@
 import com.sun.nio.sctp.AbstractNotificationHandler;
+import org.w3c.dom.ls.LSOutput;
 
+import javax.swing.filechooser.FileNameExtensionFilter;
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.security.cert.Extension;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Calendar;
-import java.util.HashMap;
-import java.util.Scanner;
+import java.util.*;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
+import java.util.zip.ZipInputStream;
 
+//import org.apache.*;
 public class LogParser {
 
     private ArrayList<String> inputLogPathList = new ArrayList<>();
@@ -102,73 +106,132 @@ public class LogParser {
         }
     }
 
+    private void InnerWriteResultLogs(InputStream input) throws IOException {
+        try (InputStreamReader reader = new InputStreamReader(input);
+             BufferedReader bufferedReader = new BufferedReader(reader)) {
+            String line = "";
+            while (bufferedReader.ready()) {
+                var temp = bufferedReader.readLine();
+                if (!temp.contains(UID_MARKER)) {
+                    line = line + "\n" + temp;
+                } else line = temp;
 
-    private void WriteResultLogs() throws Exception {
-        if (UIDMap.isEmpty()) { //если мы не нашли нужные UIDы
-            return;
-        }
-        for (String inputLogPathElement : inputLogPathList) {
-            try (InputStream input = Files.newInputStream(Path.of(inputLogPathElement));
-                 InputStreamReader reader = new InputStreamReader(input);
-                 BufferedReader bufferedReader = new BufferedReader(reader)) {
-                String line = "";
-                while (bufferedReader.ready()) {
-                    var temp = bufferedReader.readLine();
-
-                    if (!temp.contains(UID_MARKER)) {
-                        line = line + "\n" + temp;
-                    } else line = temp;
-
-
-                    for (String UIDNumber : UIDMap.keySet()) {  //пробегаем по множеству UID
-                        if (!line.contains(UIDNumber))
-                            continue;
-                        var outputLogPath = UIDMap.get(UIDNumber);
-                        Path file = Path.of(outputLogPath);
-                        try (FileWriter writer = new FileWriter(outputLogPath, true)) {
-                            if (Files.notExists(file)) {
-                                Files.createFile(file); //создали файлик для данного UID
-                            }
-                            writer.write(temp + "\n");//записываем строку в свой UID
+                for (String UIDNumber : UIDMap.keySet()) {  //пробегаем по множеству UID
+                    if (!line.contains(UIDNumber))
+                        continue;
+                    var outputLogPath = UIDMap.get(UIDNumber);
+                    Path file = Path.of(outputLogPath);
+                    try (FileWriter writer = new FileWriter(outputLogPath, true)) {
+                        if (Files.notExists(file)) {
+                            Files.createFile(file); //создали файлик для данного UID
                         }
+                        writer.write(temp + "\n");//записываем строку в свой UID
                     }
                 }
-
-
-            } catch (Exception e) {
-                System.out.println("Возникла ошибка: " + e);
-                e.printStackTrace();
-                throw e;
             }
         }
     }
 
-    private void SearchNeededTextInFile(String inputLogPathElement, String resultDirectoryPath) throws IOException {
-        try (InputStream input = Files.newInputStream(Path.of(inputLogPathElement));
-             InputStreamReader reader = new InputStreamReader(input);
-             BufferedReader bufferedReader = new BufferedReader(reader)) {
+    private void WriteResultLogs() throws Exception {
+        if (UIDMap.isEmpty()) { //если мы не нашли нужные UIDы
+            System.out.println("Искомые " + UID_MARKER + " не найдены.");
+            return;
+        }
+        for (String inputLogPathElement : inputLogPathList) {
+            String extension = "";
+            if (inputLogPathElement.contains(".")) {
+                extension = inputLogPathElement.substring(inputLogPathElement.lastIndexOf(".") + 1);
+            }
+            if (extension.equalsIgnoreCase("ZIP")) {
+                try (ZipFile zipFile = new ZipFile(inputLogPathElement)) {
+                    final Enumeration<? extends ZipEntry> entries = zipFile.entries();
+                    while (entries.hasMoreElements()) {
+                        ZipEntry zipEntry = entries.nextElement();
+                        try (InputStream input = zipFile.getInputStream(zipFile.getEntry(zipEntry.getName()))) {
+                            InnerWriteResultLogs(input);
+                        } catch (IOException e) {
+                            System.out.println("Произошла ошибка чтения архива" + zipEntry);
+                            e.printStackTrace();
+                            throw e;
+                        }
+                    }
+                }
+            } else {
+                try (InputStream input = Files.newInputStream(Path.of(inputLogPathElement))) {
+                    InnerWriteResultLogs(input);
+                } catch (Exception e) {
+                    System.out.println("Возникла ошибка чтения файла" + inputLogPathElement);
+                    e.printStackTrace();
+                    throw e;
+                }
+            }
+        }
+    }
 
+
+    private void InnerSearchNeededTextInFile(InputStream input, String resultDirectoryPath) throws IOException {
+        try (InputStreamReader reader = new InputStreamReader(input);
+             BufferedReader bufferedReader = new BufferedReader(reader)) {
             String line = "";
-            ArrayList<String> tempCollection = new ArrayList<>();
             while (bufferedReader.ready()) {
                 var temp = bufferedReader.readLine();
                 if (!temp.contains(UID_MARKER)) {   //если текущая строка не содержит UID==
                     line = line + "\n" + temp;  //записываем ее к предыдущим строчкам в line
-
-                } else
-                    line = temp; //если текущая строка содержит UID=, то line обновляется и эта строчка становится в ней первой
-                for (String neededTextElement : neededTextList) {
-                    if (line.contains(neededTextElement)) {   //если тек.строчка содержит этот искомый текст
-                        tempCollection.add(neededTextElement);  //добавляем во временную коллекцию этот текст, чтобы маркировать
-                    }
-                }
-                if (tempCollection.containsAll(neededTextList)) {
-                    var UID = UIDsearcher(line);
-                    var outputLogPath = resultDirectoryPath + "\\UID" + UID + ".txt";
-                    UIDMap.put(UID, outputLogPath);   //добавили UID в множество
-                }
-                tempCollection.clear();
+                } else {
+                    SearchAllNeededTextsInLog(line, resultDirectoryPath);
+                    line = temp;
+                }//если текущая строка содержит UID=, то line обновляется и эта строчка становится в ней первой
             }
+            SearchAllNeededTextsInLog(line, resultDirectoryPath);   //необходимо выполнить проверку для последнего лога в файле
         }
     }
+
+    private void SearchNeededTextInFile(String inputLogPathElement, String resultDirectoryPath) throws IOException {
+        //проверка формата файла
+        String extension = "";
+        if (inputLogPathElement.contains(".")) {
+            extension = inputLogPathElement.substring(inputLogPathElement.lastIndexOf(".") + 1);
+        }
+        if (extension.equalsIgnoreCase("ZIP")) {
+            try (ZipFile zipFile = new ZipFile(inputLogPathElement)) {
+                final Enumeration<? extends ZipEntry> entries = zipFile.entries();
+                while (entries.hasMoreElements()) {
+                    ZipEntry zipEntry = entries.nextElement();
+                    try (InputStream input = zipFile.getInputStream(zipFile.getEntry(zipEntry.getName()))) {
+                        InnerSearchNeededTextInFile(input, resultDirectoryPath);
+                    } catch (IOException e) {
+                        System.out.println("Произошла ошибка чтения архива: " + zipEntry);
+                        e.printStackTrace();
+                        throw e;
+                    }
+                }
+            }
+        } else try (InputStream input = Files.newInputStream(Path.of(inputLogPathElement))) {
+            InnerSearchNeededTextInFile(input, resultDirectoryPath);
+        } catch (IOException e) {
+            System.out.println("Произошла ошибка чтения файла " + inputLogPathElement);
+            e.printStackTrace();
+            throw e;
+        }
+
+    }
+
+    private void SearchAllNeededTextsInLog(String line, String resultDirectoryPath) throws IOException {
+        if (line == null || line.length() == 0) {
+            return;
+        }//случай, когда в line хранится полный предыдущий лог
+        ArrayList<String> tempCollection = new ArrayList<>();
+        for (String neededTextElement : neededTextList) {
+            if (line.contains(neededTextElement)) {   //если тек.строчка содержит этот искомый текст
+                tempCollection.add(neededTextElement);  //добавляем во временную коллекцию этот текст, чтобы маркировать
+            }
+        }
+        if (tempCollection.containsAll(neededTextList)) {
+            var UID = UIDsearcher(line);
+            var outputLogPath = resultDirectoryPath + "\\UID" + UID + ".txt";
+            UIDMap.put(UID, outputLogPath);   //добавили UID в множество
+        }
+        tempCollection.clear();
+    }
 }
+
